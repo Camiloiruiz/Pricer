@@ -1,0 +1,82 @@
+name: Daily Price Scraper
+
+on:
+  # Run at 05:00 UTC (00:00 EST / 01:00 EDT) every day
+  schedule:
+    - cron: "0 5 * * *"
+
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+    inputs:
+      chains:
+        description: "Comma-separated chain names to scrape (leave empty for all)"
+        required: false
+        default: ""
+
+concurrency:
+  group: scraper
+  cancel-in-progress: false   # never cancel a running scrape
+
+jobs:
+  scrape:
+    name: Scrape Grocery Prices
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Setup ───────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Playwright ──────────────────────────────────────────────────────────
+      - name: Install Playwright browsers (Chromium only)
+        run: npx playwright install chromium --with-deps
+
+      # ── Run scraper ─────────────────────────────────────────────────────────
+      - name: Run price scraper
+        env:
+          NEXT_PUBLIC_SUPABASE_URL:   ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SCRAPE_CHAINS:              ${{ github.event.inputs.chains }}
+          NODE_OPTIONS:               "--experimental-specifier-resolution=node"
+        run: |
+          echo "Starting scraper at $(date -u)"
+          npx ts-node --esm services/scraper.ts
+          echo "Scraper finished at $(date -u)"
+
+      # ── Purge stale prices ───────────────────────────────────────────────────
+      - name: Purge stale scraper prices (>7 days)
+        if: success()
+        env:
+          NEXT_PUBLIC_SUPABASE_URL:  ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ADMIN_SECRET:              ${{ secrets.ADMIN_SECRET }}
+        run: |
+          curl -s -X POST \
+            -H "x-admin-secret: ${ADMIN_SECRET}" \
+            -H "Content-Type: application/json" \
+            "${NEXT_PUBLIC_SUPABASE_URL/supabase.co/sertch.vercel.app}/api/admin/purge" \
+            || echo "Purge endpoint not reachable (OK in CI)"
+
+      # ── Notify on failure ────────────────────────────────────────────────────
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title: `[Scraper] Daily run failed — ${new Date().toISOString().split('T')[0]}`,
+              body:  `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['scraper', 'bug'],
+            });

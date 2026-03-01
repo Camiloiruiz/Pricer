@@ -1,0 +1,86 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS custom properties ──────────────────────────────────────────────────── */
+:root {
+  --font-inter: "Inter", system-ui, sans-serif;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top:    env(safe-area-inset-top, 0px);
+}
+
+/* ── Base resets for mobile ─────────────────────────────────────────────────── */
+@layer base {
+  html {
+    /* Prevent font-size zoom on input focus (iOS) */
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    padding-bottom: var(--safe-bottom);
+  }
+
+  /* Touch-friendly tap targets */
+  button, a, [role="button"] {
+    @apply touch-manipulation;
+    min-height: 44px;
+  }
+
+  input, select, textarea {
+    @apply text-base;   /* prevent zoom on iOS */
+  }
+}
+
+/* ── Utility layer ───────────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Safe-area padding for bottom nav / floating buttons */
+  .pb-safe {
+    padding-bottom: max(1rem, var(--safe-bottom));
+  }
+  .pt-safe {
+    padding-top: max(0px, var(--safe-top));
+  }
+
+  /* PWA standalone: hide browser chrome elements if needed */
+  @media (display-mode: standalone) {
+    .browser-only { display: none; }
+  }
+
+  /* Skeleton loading pulse */
+  .skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+}
+
+/* ── Component layer ─────────────────────────────────────────────────────────── */
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-brand-600 hover:bg-brand-700 active:scale-95
+           text-white font-semibold rounded-xl px-5 py-3
+           transition-all duration-150 focus-visible:outline-none
+           focus-visible:ring-2 focus-visible:ring-brand-500;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-red-600 hover:bg-red-700 active:scale-95
+           text-white font-semibold rounded-xl px-5 py-3
+           transition-all duration-150;
+  }
+
+  .input-base {
+    @apply w-full rounded-xl border border-gray-200 bg-white px-4 py-3
+           text-sm placeholder-gray-400 focus:outline-none
+           focus:ring-2 focus:ring-brand-500 focus:border-transparent
+           transition-shadow;
+  }
+}

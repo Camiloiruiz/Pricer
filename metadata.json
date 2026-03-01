@@ -1,7 +1,0 @@
-{
-  "name": "PantryPulse",
-  "description": "A high-end grocery pricing aggregator that optimizes shopping trips using Gemini AI, OCR for price tracking, and multi-factor value calculation.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}

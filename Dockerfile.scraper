@@ -1,0 +1,61 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Sertch Scraper — Playwright + Chromium image
+#
+# Based on Microsoft's official Playwright image which pre-installs all
+# browser binaries and system dependencies. Using the Jammy (Ubuntu 22.04)
+# variant because Alpine lacks the glibc shared libs Chromium requires.
+#
+# This container is designed to be run as a short-lived JOB, not a long-
+# running service. docker-compose runs it under the "scraper" profile:
+#
+#   docker compose --profile scraper run --rm scraper
+#
+# Build:
+#   docker build -f Dockerfile.scraper -t sertch-scraper .
+#
+# Run once:
+#   docker run --rm --env-file .env.local sertch-scraper
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Stage 1: deps ─────────────────────────────────────────────────────────────
+# Use the official Playwright base — Chromium + all OS dependencies pre-installed.
+# Pin to the same Playwright version declared in package.json (1.49.x).
+FROM mcr.microsoft.com/playwright:v1.49.0-jammy AS deps
+
+WORKDIR /app
+
+# Copy manifest only — maximises npm ci layer caching
+COPY package.json package-lock.json* ./
+
+# Install production + dev deps (ts-node needed to execute TypeScript directly)
+# --ignore-scripts prevents Playwright from trying to re-download browsers
+# (they're already in the base image at /ms-playwright)
+RUN npm ci --ignore-scripts
+
+# ── Stage 2: runner ───────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/playwright:v1.49.0-jammy AS runner
+
+WORKDIR /app
+
+# Bring in node_modules from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy only the files the scraper actually needs at runtime
+COPY tsconfig.json         ./tsconfig.json
+COPY services/scraper.ts   ./services/scraper.ts
+COPY lib/supabase.ts       ./lib/supabase.ts
+COPY types/database.ts     ./types/database.ts
+
+# ── Runtime env ───────────────────────────────────────────────────────────────
+ENV NODE_ENV=production
+# Tell Playwright where the pre-installed browsers live inside the base image
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# ── Security: non-root user ───────────────────────────────────────────────────
+# The Playwright base image ships with a "pwuser" account; use it.
+USER pwuser
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+# ts-node executes services/scraper.ts directly — no build step needed.
+# --esm flag required because package.json has "type": "module".
+CMD ["npx", "ts-node", "--esm", "--project", "tsconfig.json", "services/scraper.ts"]

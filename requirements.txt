@@ -1,0 +1,93 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Sertch PWA — System & Infrastructure Requirements
+#
+# This file documents the HOST-MACHINE tooling required to build, run, and
+# maintain the Sertch Docker stack.  It is NOT a Python requirements file —
+# Sertch is a Node.js / Next.js application.  Node package pinning is handled
+# entirely by package-lock.json and the Dockerfile stages.
+#
+# ── How to read this file ─────────────────────────────────────────────────────
+#   tool==version     exact minimum version required
+#   tool>=version     any version at or above this
+#   # (optional)      recommended but not strictly required
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Container runtime (REQUIRED on host) ─────────────────────────────────────
+
+# Docker Engine — builds and runs the containers
+docker>=24.0.0
+
+# Docker Compose v2 plugin (NOT docker-compose v1 — that is EOL)
+# Ships bundled with Docker Desktop on macOS / Windows.
+# Linux: sudo apt install docker-compose-plugin
+docker-compose>=2.20.0
+
+
+# ── Node.js (only needed if running outside Docker) ───────────────────────────
+
+# Node.js LTS — used directly for `npm run dev` / `npm run scrape` on host
+# Inside Docker this is provided by node:22-alpine base image.
+node>=22.0.0
+
+# npm — bundled with Node.js; must match lockfile format version 3
+npm>=10.0.0
+
+
+# ── Playwright Chromium (only needed for host-side scraper runs) ───────────────
+
+# Only needed when running `npm run scrape` directly (not via Docker).
+# Inside the Dockerfile.scraper it is pre-installed via the Playwright base image.
+# Install with:  npx playwright install chromium --with-deps
+playwright>=1.49.0
+
+
+# ── Node package constraints (critical pinnings) ──────────────────────────────
+# Full resolution is in package-lock.json.  These are the hard floor versions
+# for the packages most sensitive to breaking changes.
+
+next==15.1.0
+react>=19.0.0
+react-dom>=19.0.0
+@supabase/supabase-js>=2.46.0
+@supabase/ssr>=0.5.0
+tesseract.js>=5.1.0
+openai>=4.68.0
+typescript>=5.7.0
+tailwindcss>=3.4.17
+autoprefixer>=10.4.20
+postcss>=8.5.1
+
+
+# ── External cloud services (accounts required, no local install) ─────────────
+
+# Supabase — managed Postgres + PostGIS + Storage + Auth
+# Free tier sufficient for MVP.  Region: Canada (Central).
+supabase-project>=free-tier
+
+# Vercel — Next.js hosting (optional — app also runs fully in Docker)
+# Required only for Vercel-based deployment.
+vercel-account>=hobby
+
+# OpenAI — GPT-4o-mini for NLP fallback (optional at MVP stage)
+# Only needed if NLP product-matching features are enabled.
+openai-api-key>=gpt-4o-mini
+
+
+# ── Operating system notes ────────────────────────────────────────────────────
+#
+# macOS:    Docker Desktop >= 4.28  (Apple Silicon supported via Rosetta + arm64)
+# Windows:  Docker Desktop >= 4.28 with WSL2 backend enabled
+# Linux:    Docker Engine >= 24.0, Docker Compose plugin >= 2.20
+#           Chromium in Dockerfile.scraper requires kernel >= 4.4 (all modern distros)
+#
+# ── Port requirements ─────────────────────────────────────────────────────────
+#
+# 3000/tcp  — Next.js web server (configurable via WEB_PORT env var)
+#
+# ── Disk space estimates ──────────────────────────────────────────────────────
+#
+# sertch-web image (production runner stage):    ~200 MB
+# sertch-scraper image (Playwright + Chromium):  ~1.5 GB
+# Build cache (.buildx-cache):                   ~400 MB
+# Total (cold):                                  ~2.1 GB

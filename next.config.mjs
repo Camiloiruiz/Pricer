@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ── Docker / Standalone output ────────────────────────────────────────────
+  // Produces .next/standalone/ — a self-contained Node server with only the
+  // required node_modules subset. Keeps the Docker runner image ~150 MB.
+  // Do NOT set this when deploying to Vercel (Vercel ignores it safely).
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
+
   // ── PWA / Service-Worker ───────────────────────────────────────────────────
   // We ship a hand-rolled sw.js in /public so Next.js just needs to expose it.
   // Asset-cache strategies live inside public/sw.js (see Workbox-free impl).

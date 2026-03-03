@@ -1,0 +1,59 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Sertch — docker-compose.dev.yaml  (development override)
+#
+# Merges WITH docker-compose.yaml to replace the production Next.js server
+# with the Turbopack dev server, mounting source code for hot-reload.
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up
+#
+# Or add this shell alias to your ~/.bashrc / ~/.zshrc:
+#   alias sertch-dev="docker compose -f docker-compose.yaml -f docker-compose.dev.yaml"
+#   sertch-dev up          # start
+#   sertch-dev down        # stop
+#   sertch-dev logs -f     # follow logs
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: sertch
+
+services:
+  web:
+    # Override: build from the deps stage only — runner stage not needed in dev
+    build:
+      target: deps
+
+    # Override: run the Next.js Turbopack dev server instead of node server.js
+    command: ["npx", "next", "dev", "--turbopack", "--port", "3000"]
+
+    # Override: mount source for hot-reload.
+    # node_modules is excluded via the anonymous volume trick below so the
+    # host's (potentially missing) node_modules don't shadow the container's.
+    volumes:
+      - .:/app                          # full source mount
+      - /app/node_modules               # anonymous vol keeps container node_modules
+      - /app/.next                      # anonymous vol keeps .next build cache
+
+    # Override: development env
+    environment:
+      NODE_ENV:              development
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_OUTPUT:           ""         # disable standalone in dev (not needed)
+
+    # Override: disable restart in dev — let it fail visibly
+    restart: "no"
+
+    # Override: expose source maps port and dev ports
+    ports:
+      - "3000:3000"
+
+    # Override: no resource caps in dev
+    deploy:
+      resources:
+        limits:
+          cpus:   "4.00"
+          memory: "2G"
+
+    # Inherit healthcheck from base — still useful in dev
+    healthcheck:
+      test:         ["CMD", "wget", "-qO-", "http://localhost:3000/api/stores?lat=0&lng=0"]
+      start_period: 30s   # Turbopack takes longer to boot on first run

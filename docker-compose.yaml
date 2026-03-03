@@ -1,0 +1,150 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Sertch — docker-compose.yaml  (production / staging stack)
+#
+# Services:
+#   web      – Next.js PWA server (always-on)
+#   scraper  – Playwright price scraper (run-once job, profile: scraper)
+#
+# Usage:
+#   Start web only:
+#     docker compose up -d
+#
+#   Run scraper once then remove container:
+#     docker compose --profile scraper run --rm scraper
+#
+#   Stop everything:
+#     docker compose down
+#
+# Prerequisites:
+#   Copy .env.local.example → .env.local and fill in Supabase credentials.
+#   The env_file directive reads .env.local at container start — secrets are
+#   NEVER baked into the image layers.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: sertch
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  sertch_net:
+    driver: bridge
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ── Web (Next.js PWA) ───────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Pass NEXT_PUBLIC_* build args so they get baked into the client bundle.
+      # These are NOT secrets — they are intentionally public.
+      args:
+        NEXT_PUBLIC_SUPABASE_URL:   ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_SITE_URL:       ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      target: runner     # build only up to the final runner stage
+      # Cache layer for CI / repeated builds
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      cache_to:
+        - type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+    image: sertch-web:latest
+
+    container_name: sertch_web
+
+    restart: unless-stopped
+
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+    # Runtime secrets injected from .env.local — never in the image
+    env_file:
+      - .env.local
+
+    # Explicit runtime env overrides (safe to commit — no secrets here)
+    environment:
+      NODE_ENV:    production
+      PORT:        "3000"
+      HOSTNAME:    "0.0.0.0"
+      # Activates standalone output in next.config.mjs
+      NEXT_OUTPUT: standalone
+
+    networks:
+      - sertch_net
+
+    # Health check mirrors the one in the Dockerfile
+    healthcheck:
+      test:         ["CMD", "wget", "-qO-", "http://localhost:3000/manifest.webmanifest"]
+      interval:     30s
+      timeout:      10s
+      start_period: 20s
+      retries:      3
+
+    # Limit resource usage — adjust for your host
+    deploy:
+      resources:
+        limits:
+          cpus:   "1.00"
+          memory: "512M"
+        reservations:
+          cpus:   "0.25"
+          memory: "256M"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Scraper (short-lived job) ────────────────────────────────────────────────
+  # Run with:  docker compose --profile scraper run --rm scraper
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile.scraper
+      target: runner
+
+    image: sertch-scraper:latest
+
+    container_name: sertch_scraper
+
+    # Only started when --profile scraper is passed — not part of `up`
+    profiles:
+      - scraper
+
+    # No restart — it's a one-shot job
+    restart: "no"
+
+    env_file:
+      - .env.local
+
+    environment:
+      NODE_ENV:              production
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+
+    networks:
+      - sertch_net
+
+    # Scraper needs more memory for Chromium
+    deploy:
+      resources:
+        limits:
+          cpus:   "2.00"
+          memory: "1G"
+        reservations:
+          memory: "512M"
+
+    # Security: no new privileges, drop all caps, read-only root fs
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN          # Required by Chromium sandbox (or use --no-sandbox flag)
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
